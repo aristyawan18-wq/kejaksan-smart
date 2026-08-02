@@ -1464,7 +1464,7 @@ body.dark-mode #auth-realtime-card{ background: #1E1B2E; border-color:#D0BCFF; }
             </div>
             <div style="background:#FFF8E1; padding:10px; border-radius:12px; text-align:center;">
               <div style="font-size:18px; font-weight:700; color:#EF6C00;" id="online-stat-idle">0</div>
-              <div style="font-size:10px; color:#EF6C00;">Idle >1m</div>
+              <div style="font-size:10px; color:#EF6C00;">Idle >2m</div>
             </div>
             <div style="background:#F3E5F5; padding:10px; border-radius:12px; text-align:center;">
               <div style="font-size:18px; font-weight:700; color:#6A1B9A;" id="online-stat-today">0</div>
@@ -7383,11 +7383,11 @@ window.initPresenceSystem = function(){
     const warga=getCurrentWarga();
     const now=Date.now();
     const currentTab = (typeof currentTab !== 'undefined' ? currentTab : window.currentTab || 'beranda');
-    let list = loadPresenceLocal().filter(u=> (now-u.lastSeen)<45000 || u.id===my.id);
+    let list = loadPresenceLocal().filter(u=> (now-u.lastSeen)<300000 || u.id===my.id);
     let me = list.find(u=>u.id===my.id);
     if(!me){ me={ id:my.id, name:warga.name, role:warga.role, device:info.device, isMobile:info.isMobile, lastSeen:now, firstSeen:now, currentTab, avatarColor:['#6750A4','#2E7D32','#1565C0','#EF6C00','#6A1B9A','#00796B'][Math.floor(Math.random()*6)] }; list.push(me); }
     else { me.name=warga.name; me.role=warga.role; me.lastSeen=now; me.currentTab=currentTab; me.device=info.device; }
-    list = list.filter(u=> (now-u.lastSeen)<45000);
+    list = list.filter(u=> (now-u.lastSeen)<300000);
     savePresenceLocal(list);
     currentPresenceList = list;
     if(document.getElementById('tab-admin')?.classList.contains('active')) renderOnlinePresence();
@@ -7443,6 +7443,7 @@ window.initPresenceSystem = function(){
     window.addEventListener('storage', (e)=>{ if(e.key===PRESENCE_KEY){ currentPresenceList = loadPresenceLocal(); if(document.getElementById('tab-admin')?.classList.contains('active')) renderOnlinePresence(); } });
   }
 
+  setTimeout(()=>{ try{ if(typeof initPresenceSystem==='function' && isFirebaseActive) initPresenceSystem(); }catch(e){} }, 1500);
   window.addEventListener('beforeunload', ()=>{
     if(isFirebaseActive && db){
       try{ remove(ref(db, 'presence_kejaksan/v2/'+my.id)); }catch(e){}
@@ -7458,7 +7459,7 @@ window.renderOnlinePresence = function(){
   if(!listEl) return;
   let list = isFirebaseActive ? currentPresenceList : loadPresenceLocal();
   const now = Date.now();
-  if(!isFirebaseActive) list = list.filter(u=> (now-u.lastSeen)<45000);
+  if(!isFirebaseActive) list = list.filter(u=> (now-u.lastSeen)<300000);
 
   const q = (document.getElementById('online-search')?.value||'').toLowerCase();
   const roleF = document.getElementById('online-filter-role')?.value||'all';
@@ -7468,7 +7469,7 @@ window.renderOnlinePresence = function(){
 
   const total = list.length;
   const wargaCount = list.filter(u=> (u.role||'').toLowerCase().includes('warga')).length;
-  const idle = list.filter(u=> (now-(u.lastSeen||0))>60000).length;
+  const idle = list.filter(u=> (now-(u.lastSeen||0))>120000).length;
   let todayKey = 'kejaksan_presence_history_'+new Date().toISOString().slice(0,10);
   let todaySet = new Set();
   try{ const raw=localStorage.getItem(todayKey); if(raw) todaySet=new Set(JSON.parse(raw)); }catch(e){}
@@ -7858,7 +7859,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
 
     // before unload mark offline quickly
-    window.addEventListener('beforeunload', ()=>{
+    setTimeout(()=>{ try{ if(typeof initPresenceSystem==='function' && isFirebaseActive) initPresenceSystem(); }catch(e){} }, 1500);
+  window.addEventListener('beforeunload', ()=>{
       try{
         const list = loadPresence();
         const filtered = list.filter(u=>u.id!==my.id);

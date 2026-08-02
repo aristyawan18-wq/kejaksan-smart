@@ -1,1 +1,10 @@
-{"cleanUrls":false}
+{
+  "cleanUrls": false,
+  "trailingSlash": false,
+  "rewrites": [
+    { "source": "/Kejaksan_Smart_PUSH.html", "destination": "/Kejaksan_Smart_PUSH.html" },
+    { "source": "/Buka-Kejaksan_Warga_PUSH.html", "destination": "/Buka-Kejaksan_Warga_PUSH.html" },
+    { "source": "/kejaksan-sw.js", "destination": "/kejaksan-sw.js" },
+    { "source": "/firebase-messaging-sw.js", "destination": "/firebase-messaging-sw.js" }
+  ]
+}

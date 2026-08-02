@@ -2897,7 +2897,7 @@
       }
     }
     // Emergency: long-press splash 3 detik untuk reset login
-    document.addEventListener('DOMContentLoaded', ()=>{
+    document.addEventListener('DOMContentLoaded', ()=>{ setTimeout(()=>{ try{ if(typeof initPresenceSystem==='function') initPresenceSystem(); }catch(e){console.log(e)} }, 1000);
       const splash = document.getElementById('splash-screen');
       if(splash){
         let pressTimer=null;
@@ -3813,7 +3813,7 @@
     window.handleVersionClick = handleVersionClick;
 
     // Auto check on DOMContentLoaded
-    document.addEventListener('DOMContentLoaded', ()=>{
+    document.addEventListener('DOMContentLoaded', ()=>{ setTimeout(()=>{ try{ if(typeof initPresenceSystem==='function') initPresenceSystem(); }catch(e){console.log(e)} }, 1000);
       setTimeout(checkAdminUnlockOnLoad, 300);
     });
     // Also check immediately if DOM already ready
@@ -5382,7 +5382,7 @@
         .bindPopup('<div class="custom-popup"><h4>Kota Cirebon</h4><p>Kota Udang - Jawa Barat</p></div>').addTo(map);
 
       const kejaksanCoords = [
-        [-6.7000, 108.5500], [-6.7000, 108.5650], [-6.7120, 108.5650], [-6.7120, 108.5500]
+        [-6.5000, 108.5500], [-6.5000, 108.5650], [-6.7120, 108.5650], [-6.7120, 108.5500]
       ];
       L.polygon(kejaksanCoords, { color: '#4F378B', weight: 2, fillOpacity: 0.15, fillColor: '#4F378B' })
         .bindPopup('<div class="custom-popup"><h4>Kec. Kejaksan</h4><p>Kelurahan Kejaksan</p></div>').addTo(map);
@@ -6651,7 +6651,7 @@ renderAnnouncements = async function(){
 };
 
 // Init location persistence on load
-document.addEventListener('DOMContentLoaded', ()=>{
+document.addEventListener('DOMContentLoaded', ()=>{ setTimeout(()=>{ try{ if(typeof initPresenceSystem==='function') initPresenceSystem(); }catch(e){console.log(e)} }, 1000);
   const saved = localStorage.getItem('kejaksan_last_location');
   if(saved){
     try{ const j=JSON.parse(saved); const el=document.getElementById('widget-location'); if(el) el.textContent=j.lat.toFixed(2)+','+j.lng.toFixed(2); }catch(e){}
@@ -7269,7 +7269,7 @@ window.handleLogin = async function(e){
 };
 
 // Prefill login fields
-document.addEventListener('DOMContentLoaded', ()=>{
+document.addEventListener('DOMContentLoaded', ()=>{ setTimeout(()=>{ try{ if(typeof initPresenceSystem==='function') initPresenceSystem(); }catch(e){console.log(e)} }, 1000);
   const u = document.getElementById('login-username');
   const p = document.getElementById('login-password');
   if(u){ u.value = WARGA_USER; u.setAttribute('value', WARGA_USER); }
@@ -7384,7 +7384,7 @@ window._emitPushTest = emitPushToFirebase;
 
   window.closeVerifyModal = function(){ document.getElementById('modal-verify-overlay')?.classList.remove('active'); };
 
-  document.addEventListener('DOMContentLoaded', ()=>{
+  document.addEventListener('DOMContentLoaded', ()=>{ setTimeout(()=>{ try{ if(typeof initPresenceSystem==='function') initPresenceSystem(); }catch(e){console.log(e)} }, 1000);
     setTimeout(initSigPad, 800);
   });
 })();
@@ -7467,7 +7467,7 @@ window.initPresenceSystem = function(){
       window._fbHeartbeat=setInterval(()=>{
         const wn=getCurrentWarga();
         update(myRef,{ name:wn.name, role:wn.role, currentTab:(window.currentTab||'beranda'), lastSeen:Date.now(), device:getDeviceInfo().device });
-      }, 7000);
+      }, 5000);
     }
   });
   onValue(presenceRefRoot, (snapshot)=>{
@@ -7475,7 +7475,7 @@ window.initPresenceSystem = function(){
     currentPresenceList=Object.values(data);
     // filter offline >90 detik
     const now=Date.now();
-    currentPresenceList=currentPresenceList.filter(u=> (now-(u.lastSeen||0))<90000);
+    currentPresenceList=currentPresenceList.filter(u=> (now-(u.lastSeen||0))<300000);
     if(document.getElementById('tab-admin')?.classList.contains('active')) renderOnlinePresence();
     const badge=document.getElementById('adm-online-count');
     if(badge) badge.textContent=currentPresenceList.length+' Online • REAL';
@@ -7493,7 +7493,7 @@ window.renderOnlinePresence = function(){
   if(!listEl) return;
   let list=currentPresenceList;
   const now=Date.now();
-  list=list.filter(u=> (now-(u.lastSeen||0))<90000);
+  list=list.filter(u=> (now-(u.lastSeen||0))<300000);
   const q=(document.getElementById('online-search')?.value||'').toLowerCase();
   const roleF=document.getElementById('online-filter-role')?.value||'all';
   let filtered=list;
@@ -7564,7 +7564,7 @@ window.pingUser = (id)=>{
   if(u && typeof showToast==='function') showToast('👋 Menyapa '+u.name+' • REAL Firebase','info');
 };
 
-document.addEventListener('DOMContentLoaded', ()=>{
+document.addEventListener('DOMContentLoaded', ()=>{ setTimeout(()=>{ try{ if(typeof initPresenceSystem==='function') initPresenceSystem(); }catch(e){console.log(e)} }, 1000);
   setTimeout(()=>{
     getMySession();
     initPresenceSystem();
@@ -7708,7 +7708,7 @@ window.handleLogin = async function(e){
 };
 
 // Prefill login fields
-document.addEventListener('DOMContentLoaded', ()=>{
+document.addEventListener('DOMContentLoaded', ()=>{ setTimeout(()=>{ try{ if(typeof initPresenceSystem==='function') initPresenceSystem(); }catch(e){console.log(e)} }, 1000);
   const u = document.getElementById('login-username');
   const p = document.getElementById('login-password');
   if(u){ u.value = WARGA_USER; u.setAttribute('value', WARGA_USER); }
