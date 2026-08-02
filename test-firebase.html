@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TEST Firebase Kejaksan</title>
+<style>body{font-family:monospace;padding:20px;background:#111;color:#0f0} .ok{color:#0f0} .err{color:#f55} .card{background:#222;padding:16px;border-radius:12px;margin-bottom:12px}</style>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, set, onValue, push } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+const firebaseConfig = {
+  apiKey: "AIzaSyAWOoYiS4vuXXCc03aFrnTIsbLxipy-hCK",
+  authDomain: "kejaksan-smart.firebaseapp.com",
+  databaseURL: "https://kejaksan-smart-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "kejaksan-smart",
+  storageBucket: "kejaksan-smart.firebasestorage.app",
+  messagingSenderId: "295979776623",
+  appId: "1:295979776623:web:150a939661dc435d2c2b9a"
+};
+let out = (m,c='')=>{ document.getElementById('log').innerHTML += `<div class="${c}">${new Date().toLocaleTimeString()} - ${m}</div>`; };
+try{
+  out("1. Init Firebase...");
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  out("2. Firebase OK - getDatabase berhasil","ok");
+  // test write
+  out("3. Coba tulis ke /test_kejaksan ...");
+  const testRef = ref(db, 'test_kejaksan/'+Date.now());
+  set(testRef, {time: Date.now(), hp: navigator.userAgent.slice(0,40)}).then(()=>{
+    out("4. WRITE BERHASIL! Rules sudah Publish -> Firebase Aktif lintas HP","ok");
+    out("5. Coba listen...");
+  }).catch(e=>{
+    out("4. WRITE GAGAL: "+e.message,"err");
+    out("=> Buka console.firebase.google.com -> Realtime Database -> Rules ganti jadi {'.read':true,'.write':true} lalu Publish","err");
+  });
+  // listen auth_events
+  const authRef = ref(db, 'auth_events_v2');
+  onValue(authRef, snap=>{
+    out("LISTEN auth_events_v2: ada "+snap.size+" data, realtime jalan!","ok");
+  }, err=>{ out("LISTEN GAGAL: "+err.message,"err"); });
+}catch(e){
+  out("INIT GAGAL: "+e.message+" "+e.stack,"err");
+}
+</script></head>
+<body>
+<h2>🔥 TEST KONEKSI Firebase Kejaksan</h2>
+<div class="card" id="log">Menunggu...</div>
+<div class="card" style="color:#ff0">Jika ada tulisan WRITE BERHASIL, berarti Firebase kamu sudah OK. Setelah itu buka lagi admin asli, pasti langsung hijau.</div>
+</body></html>
