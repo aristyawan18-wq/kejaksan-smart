@@ -7696,71 +7696,44 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
 
 <script>
-// PATCH V6 - Kembalikan Firebase + Fix Online jadi 15 menit + dari auth_events
+// V7 MINIMAL - Fix Online = 15 menit, tidak merusak login
 (function(){
-  console.log('PATCH V6 loaded');
-  // Store auth events globally
-  const _origRenderAuth = window.renderAuthEvents;
-  window._authEventsV6 = [];
-  window.renderAuthEvents = function(arr){
-    window._authEventsV6 = arr || [];
-    if(typeof _origRenderAuth==='function'){ try{ _origRenderAuth(arr); }catch(e){} }
-    // after auth rendered, also render online
-    try{ renderOnlineV6(); }catch(e){}
-  };
-  function renderOnlineV6(){
-    const listEl=document.getElementById('online-users-list');
-    if(!listEl) return;
+  console.log('V7 fix loaded - online 15m');
+  function fixOnline(){
     try{
+      const listEl=document.getElementById('online-users-list');
+      if(!listEl) return;
+      // if already has data from presence, keep it, just extend filter
+      // also update the 0 Online badge if auth_events shows recent login
+      const events = window.authEvents || window._authEvents || [];
+      if(events.length===0) return;
       const now=Date.now();
-      const events = window._authEventsV6 || [];
       const map={};
       events.forEach(ev=>{ if(!ev.username) return; if(!map[ev.username] || (ev.time||0)>(map[ev.username].time||0)) map[ev.username]=ev; });
       let online=[];
       Object.values(map).forEach(ev=>{
         const age=now-(ev.time||0);
-        if(ev.type==='login' && age<900000){ // 15 menit
-          online.push({name: ev.username==='warga'?'Warga Kejaksan':ev.username, role: ev.role||'Warga', device: ev.device||'Android', lastSeen: ev.time});
-        }
+        if(ev.type==='login' && age<900000) online.push(ev);
       });
-      // merge with presence if any
-      if(window.currentPresenceList && window.currentPresenceList.length>0){
-        window.currentPresenceList.forEach(u=>{ if((now-(u.lastSeen||0))<900000){ if(!online.find(o=>o.name===u.name)) online.push(u); } });
-      }
-      // update the 4 boxes
-      const total=online.length;
-      const container = listEl.parentElement;
-      if(container){
-        // find the stat boxes
-        container.querySelectorAll('div').forEach(div=>{
-          if(div.textContent.trim()==='Total Online'){ const n=div.previousElementSibling; if(n) n.textContent=total; }
-          if(div.textContent.trim()==='Warga'){ const n=div.previousElementSibling; if(n) n.textContent=total; }
-          if(div.textContent.trim()==='Hari Ini'){ const n=div.previousElementSibling; if(n) n.textContent=total; }
-        });
-        // update badge 0 Online
+      if(online.length>0){
+        // update badge
         document.querySelectorAll('div').forEach(d=>{
-          if(d.textContent.trim()==='0 Online' || d.textContent.includes('0 Online')){
-            d.innerHTML='<span style="display:inline-flex;align-items:center;gap:6px"><span style="width:10px;height:10px;background:#4CAF50;border-radius:50%;display:inline-block;box-shadow:0 0 0 3px rgba(76,175,80,0.3)"></span> '+total+' Online</span>';
+          if(d.textContent.trim()==='0 Online'){
+            d.innerHTML='<span style="display:inline-flex;align-items:center;gap:6px"><span style="width:10px;height:10px;background:#4CAF50;border-radius:50%"></span> '+online.length+' Online</span>';
           }
         });
-      }
-      if(total===0){
-        // keep original "tidak ada hasil" but add hint
-        if(listEl.innerHTML.includes('Tidak ada hasil') || listEl.innerHTML.includes('0')){
-          listEl.innerHTML='<div style="text-align:center;padding:30px;color:#666"><div style="font-size:28px">⏳</div><div style="font-weight:700;margin-top:8px">Menunggu warga login</div><div style="font-size:11px;margin-top:4px">Login sebagai warga sekarang (tanpa logout) akan muncul di sini.<br>Last login 18m lalu = sudah lewat 15m jadi offline</div></div>';
+        // update 4 boxes
+        const parent=listEl.parentElement;
+        if(parent){
+          parent.querySelectorAll('div').forEach(div=>{
+            if(div.textContent.trim()==='Total Online'){ const n=div.previousElementSibling; if(n) n.textContent=online.length; }
+            if(div.textContent.trim()==='Warga'){ const n=div.previousElementSibling; if(n) n.textContent=online.length; }
+          });
         }
-      } else {
-        let h='';
-        online.forEach(u=>{
-          const ago=Math.floor((now-u.lastSeen)/1000);
-          const agoTxt=ago<60? ago+'d lalu' : Math.floor(ago/60)+'m lalu';
-          h+='<div style="display:flex;gap:12px;align-items:center;padding:12px;border:1px solid #C8E6C9;border-radius:12px;margin-bottom:8px;background:#E8F5E9"><div style="width:40px;height:40px;border-radius:50%;background:#2E7D32;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700">'+u.name[0]+'</div><div style="flex:1"><div style="font-weight:700">'+u.name+' <span style="font-size:10px;background:#E8F5E9;padding:2px 6px;border-radius:8px;border:1px solid #C8E6C9">'+u.role+'</span></div><div style="font-size:11px;color:#666">'+u.device+' • '+agoTxt+'</div></div><div style="width:10px;height:10px;background:#4CAF50;border-radius:50%"></div></div>';
-        });
-        listEl.innerHTML=h;
       }
-    }catch(e){ console.log('V6 err',e); }
+    }catch(e){console.log('V7 err',e)}
   }
-  setInterval(()=>{ try{ renderOnlineV6(); }catch(e){} }, 3000);
+  setInterval(fixOnline, 3000);
 })();
 </script>
 
@@ -8476,71 +8449,44 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
 
 <script>
-// PATCH V6 - Kembalikan Firebase + Fix Online jadi 15 menit + dari auth_events
+// V7 MINIMAL - Fix Online = 15 menit, tidak merusak login
 (function(){
-  console.log('PATCH V6 loaded');
-  // Store auth events globally
-  const _origRenderAuth = window.renderAuthEvents;
-  window._authEventsV6 = [];
-  window.renderAuthEvents = function(arr){
-    window._authEventsV6 = arr || [];
-    if(typeof _origRenderAuth==='function'){ try{ _origRenderAuth(arr); }catch(e){} }
-    // after auth rendered, also render online
-    try{ renderOnlineV6(); }catch(e){}
-  };
-  function renderOnlineV6(){
-    const listEl=document.getElementById('online-users-list');
-    if(!listEl) return;
+  console.log('V7 fix loaded - online 15m');
+  function fixOnline(){
     try{
+      const listEl=document.getElementById('online-users-list');
+      if(!listEl) return;
+      // if already has data from presence, keep it, just extend filter
+      // also update the 0 Online badge if auth_events shows recent login
+      const events = window.authEvents || window._authEvents || [];
+      if(events.length===0) return;
       const now=Date.now();
-      const events = window._authEventsV6 || [];
       const map={};
       events.forEach(ev=>{ if(!ev.username) return; if(!map[ev.username] || (ev.time||0)>(map[ev.username].time||0)) map[ev.username]=ev; });
       let online=[];
       Object.values(map).forEach(ev=>{
         const age=now-(ev.time||0);
-        if(ev.type==='login' && age<900000){ // 15 menit
-          online.push({name: ev.username==='warga'?'Warga Kejaksan':ev.username, role: ev.role||'Warga', device: ev.device||'Android', lastSeen: ev.time});
-        }
+        if(ev.type==='login' && age<900000) online.push(ev);
       });
-      // merge with presence if any
-      if(window.currentPresenceList && window.currentPresenceList.length>0){
-        window.currentPresenceList.forEach(u=>{ if((now-(u.lastSeen||0))<900000){ if(!online.find(o=>o.name===u.name)) online.push(u); } });
-      }
-      // update the 4 boxes
-      const total=online.length;
-      const container = listEl.parentElement;
-      if(container){
-        // find the stat boxes
-        container.querySelectorAll('div').forEach(div=>{
-          if(div.textContent.trim()==='Total Online'){ const n=div.previousElementSibling; if(n) n.textContent=total; }
-          if(div.textContent.trim()==='Warga'){ const n=div.previousElementSibling; if(n) n.textContent=total; }
-          if(div.textContent.trim()==='Hari Ini'){ const n=div.previousElementSibling; if(n) n.textContent=total; }
-        });
-        // update badge 0 Online
+      if(online.length>0){
+        // update badge
         document.querySelectorAll('div').forEach(d=>{
-          if(d.textContent.trim()==='0 Online' || d.textContent.includes('0 Online')){
-            d.innerHTML='<span style="display:inline-flex;align-items:center;gap:6px"><span style="width:10px;height:10px;background:#4CAF50;border-radius:50%;display:inline-block;box-shadow:0 0 0 3px rgba(76,175,80,0.3)"></span> '+total+' Online</span>';
+          if(d.textContent.trim()==='0 Online'){
+            d.innerHTML='<span style="display:inline-flex;align-items:center;gap:6px"><span style="width:10px;height:10px;background:#4CAF50;border-radius:50%"></span> '+online.length+' Online</span>';
           }
         });
-      }
-      if(total===0){
-        // keep original "tidak ada hasil" but add hint
-        if(listEl.innerHTML.includes('Tidak ada hasil') || listEl.innerHTML.includes('0')){
-          listEl.innerHTML='<div style="text-align:center;padding:30px;color:#666"><div style="font-size:28px">⏳</div><div style="font-weight:700;margin-top:8px">Menunggu warga login</div><div style="font-size:11px;margin-top:4px">Login sebagai warga sekarang (tanpa logout) akan muncul di sini.<br>Last login 18m lalu = sudah lewat 15m jadi offline</div></div>';
+        // update 4 boxes
+        const parent=listEl.parentElement;
+        if(parent){
+          parent.querySelectorAll('div').forEach(div=>{
+            if(div.textContent.trim()==='Total Online'){ const n=div.previousElementSibling; if(n) n.textContent=online.length; }
+            if(div.textContent.trim()==='Warga'){ const n=div.previousElementSibling; if(n) n.textContent=online.length; }
+          });
         }
-      } else {
-        let h='';
-        online.forEach(u=>{
-          const ago=Math.floor((now-u.lastSeen)/1000);
-          const agoTxt=ago<60? ago+'d lalu' : Math.floor(ago/60)+'m lalu';
-          h+='<div style="display:flex;gap:12px;align-items:center;padding:12px;border:1px solid #C8E6C9;border-radius:12px;margin-bottom:8px;background:#E8F5E9"><div style="width:40px;height:40px;border-radius:50%;background:#2E7D32;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700">'+u.name[0]+'</div><div style="flex:1"><div style="font-weight:700">'+u.name+' <span style="font-size:10px;background:#E8F5E9;padding:2px 6px;border-radius:8px;border:1px solid #C8E6C9">'+u.role+'</span></div><div style="font-size:11px;color:#666">'+u.device+' • '+agoTxt+'</div></div><div style="width:10px;height:10px;background:#4CAF50;border-radius:50%"></div></div>';
-        });
-        listEl.innerHTML=h;
       }
-    }catch(e){ console.log('V6 err',e); }
+    }catch(e){console.log('V7 err',e)}
   }
-  setInterval(()=>{ try{ renderOnlineV6(); }catch(e){} }, 3000);
+  setInterval(fixOnline, 3000);
 })();
 </script>
 
