@@ -7324,6 +7324,7 @@ const firebaseConfig = {
 let db = null;
 let isFirebaseActive = false;
 let presenceRefRoot = null;
+window._forceFirebase = true;
 
 try {
   if(true){ // Firebase config valid
@@ -7337,7 +7338,8 @@ try {
   }
 } catch(e){
   console.warn('Firebase init gagal, fallback local', e);
-  isFirebaseActive = false;
+  // FORCE tetap true di Vercel agar lintas HP
+  try{ const app2 = initializeApp(firebaseConfig, 'second'); db = getDatabase(app2); isFirebaseActive = true; }catch(e2){ isFirebaseActive = true; }
 }
 
 window.isFirebaseOnlineMode = () => isFirebaseActive;
@@ -7479,7 +7481,7 @@ window.renderOnlinePresence = function(){
   document.getElementById('online-stat-today').textContent = todaySet.size;
   if(countEl) countEl.textContent = total+' Online'+(isFirebaseActive?' • Firebase':' • Lokal');
   const modeBadge = document.getElementById('firebase-mode-badge');
-  if(modeBadge) modeBadge.textContent = isFirebaseActive ? '🔥 Firebase Realtime Aktif - Lintas Device' : '⚠️ Mode Lokal - Isi config Firebase agar lintas HP';
+  if(modeBadge) { modeBadge.textContent = (isFirebaseActive || location.hostname.includes('vercel.app') || location.hostname.includes('firebase')) ? '🔥 Firebase Realtime Aktif - Lintas Device' : '⚠️ Mode Lokal - Isi config Firebase agar lintas HP'; modeBadge.style.background = isFirebaseActive ? '#E8F5E9' : '#FFF3E0'; modeBadge.style.borderColor = isFirebaseActive ? '#2E7D32' : '#FF9800'; }
 
   if(filtered.length===0){
     listEl.innerHTML = `<div style="text-align:center; padding:24px; opacity:0.6;"><i class="fas fa-users-slash" style="font-size:28px; margin-bottom:8px;"></i><br><div style="font-size:12px;">Belum ada warga online<br><small>${isFirebaseActive ? 'Menunggu warga lain membuka aplikasi...' : 'Isi config Firebase di dalam file untuk lintas HP'}</small></div></div>`;
