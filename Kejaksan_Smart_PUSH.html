@@ -7373,161 +7373,207 @@ function savePresenceLocal(list){ try{ localStorage.setItem(PRESENCE_KEY, JSON.s
 let currentPresenceList = [];
 let unsubscribe = null;
 
-
 window.initPresenceSystem = function(){
-  try{
-    const my=getMySession(); const info=getDeviceInfo();
-    if(!isFirebaseActive || !db || !presenceRefRoot){ console.warn('Firebase not ready for presence'); return; }
+  const my = getMySession();
+  const info = getDeviceInfo();
+
+  function heartbeatLocal(){
+    const warga=getCurrentWarga();
+    const now=Date.now();
+    const currentTab = (typeof currentTab !== 'undefined' ? currentTab : window.currentTab || 'beranda');
+    let list = loadPresenceLocal().filter(u=> (now-u.lastSeen)<45000 || u.id===my.id);
+    let me = list.find(u=>u.id===my.id);
+    if(!me){ me={ id:my.id, name:warga.name, role:warga.role, device:info.device, isMobile:info.isMobile, lastSeen:now, firstSeen:now, currentTab, avatarColor:['#6750A4','#2E7D32','#1565C0','#EF6C00','#6A1B9A','#00796B'][Math.floor(Math.random()*6)] }; list.push(me); }
+    else { me.name=warga.name; me.role=warga.role; me.lastSeen=now; me.currentTab=currentTab; me.device=info.device; }
+    list = list.filter(u=> (now-u.lastSeen)<45000);
+    savePresenceLocal(list);
+    currentPresenceList = list;
+    if(document.getElementById('tab-admin')?.classList.contains('active')) renderOnlinePresence();
+  }
+
+  if(isFirebaseActive && db){
+    // Firebase mode
     const myRef = ref(db, 'presence_kejaksan/v2/'+my.id);
-    const doWrite = () => {
-      try{
-        const w=getCurrentWarga();
+    const connectedRef = ref(db, '.info/connected');
+    onValue(connectedRef, (snap)=>{
+      if(snap.val()===true){
+        const warga=getCurrentWarga();
         const payload={
           id:my.id,
-          name:w.name||'Warga Kejaksan',
-          role:w.role||'Warga',
-          device:info.device||'Android',
-          isMobile:true,
-          currentTab:(window.currentTab||'beranda'),
-          lastSeen:Date.now(),
-          firstSeen:my.created||Date.now(),
-          avatarColor:'#2E7D32',
-          online:true,
-          extra:w.extra||''
+          name:warga.name,
+          role:warga.role,
+          device:info.device,
+          isMobile:info.isMobile,
+          currentTab:(typeof currentTab !== 'undefined' ? currentTab : 'beranda'),
+          lastSeen: Date.now(),
+          firstSeen: my.created,
+          avatarColor:['#6750A4','#2E7D32','#1565C0','#EF6C00','#6A1B9A','#00796B'][Math.floor(Math.random()*6)],
+          online:true
         };
         set(myRef, payload);
-        try{ onDisconnect(myRef).remove(); }catch(e){}
-        console.log('✅ Presence written', my.id);
-      }catch(e){ console.log('presence write err',e); }
-    };
-    doWrite();
-    if(window._fbHeartbeat) clearInterval(window._fbHeartbeat);
-    window._fbHeartbeat=setInterval(doWrite, 5000);
-    // listen presence
-    onValue(presenceRefRoot, (snapshot)=>{
-      const data=snapshot.val()||{};
-      currentPresenceList=Object.values(data);
-      const now=Date.now();
-      currentPresenceList=currentPresenceList.filter(u=> (now-(u.lastSeen||0))<300000);
-      try{ renderOnlinePresence(); }catch(e){}
-      const badge=document.getElementById('adm-online-count');
-      if(badge) badge.textContent=currentPresenceList.length+' Online • REAL';
-      const dot=document.getElementById('firebase-status-dot');
-      if(dot){ dot.style.background='#4CAF50'; }
-      const toast=document.getElementById('toast-online-update');
-      // update admin stats if exists
-      if(typeof updateAdminStatsFixed==='function') try{ updateAdminStatsFixed(); }catch(e){}
+        onDisconnect(myRef).remove();
+        // heartbeat update lastSeen
+        if(window._fbHeartbeat) clearInterval(window._fbHeartbeat);
+        window._fbHeartbeat = setInterval(()=>{
+          const w=getCurrentWarga();
+          update(myRef, { name:w.name, role:w.role, currentTab:(typeof currentTab !== 'undefined' ? currentTab : 'beranda'), lastSeen: Date.now() });
+        }, 8000);
+      }
     });
-    window.addEventListener('beforeunload', ()=>{ try{ remove(myRef); }catch(e){} });
-  }catch(e){ console.log('initPresenceSystem err',e); }
+
+    // Listen all presence
+    onValue(presenceRefRoot, (snapshot)=>{
+      const data = snapshot.val() || {};
+      currentPresenceList = Object.values(data);
+      if(document.getElementById('tab-admin')?.classList.contains('active')) renderOnlinePresence();
+      // update badge
+      const badge = document.getElementById('adm-online-count');
+      if(badge) badge.textContent = currentPresenceList.length+' Online • Firebase';
+      const statusDot = document.getElementById('firebase-status-dot');
+      if(statusDot){ statusDot.style.background='#4CAF50'; statusDot.title='Firebase Connected'; }
+    });
+
+  } else {
+    // fallback local
+    heartbeatLocal();
+    if(window._presenceInterval) clearInterval(window._presenceInterval);
+    window._presenceInterval = setInterval(heartbeatLocal, 8000);
+    window.addEventListener('storage', (e)=>{ if(e.key===PRESENCE_KEY){ currentPresenceList = loadPresenceLocal(); if(document.getElementById('tab-admin')?.classList.contains('active')) renderOnlinePresence(); } });
+  }
+
+  window.addEventListener('beforeunload', ()=>{
+    if(isFirebaseActive && db){
+      try{ remove(ref(db, 'presence_kejaksan/v2/'+my.id)); }catch(e){}
+    } else {
+      try{ const list=loadPresenceLocal().filter(u=>u.id!==my.id); savePresenceLocal(list); }catch(e){}
+    }
+  });
 };
 
+
+// V4: Online dihitung dari auth_events_v2 (yang sudah terbukti jalan), bukan presence_kejaksan lagi
 window.renderOnlinePresence = function(){
   const listEl=document.getElementById('online-users-list');
   if(!listEl) return;
-  let list=currentPresenceList||[];
-  const now=Date.now();
-  list=list.filter(u=> (now-(u.lastSeen||0))<300000);
-  const q=(document.getElementById('online-search')?.value||'').toLowerCase();
-  const roleF=document.getElementById('online-filter-role')?.value||'all';
-  let filtered=list;
-  if(q) filtered=filtered.filter(u=> (u.name||'').toLowerCase().includes(q));
-  if(roleF!=='all') filtered=filtered.filter(u=> (u.role||'').toLowerCase().includes(roleF.toLowerCase()));
-  const total=list.length;
-  const wargaCount=list.filter(u=> (u.role||'').toLowerCase().includes('warga')).length;
-  const idle=list.filter(u=> (now-(u.lastSeen||0))>120000).length;
-  // update counters
-  const elTotal=document.querySelector('[data-stat="totalOnline"]') || document.getElementById('stat-total-online');
-  const counters = document.querySelectorAll('.online-stats');
-  // update the 4 boxes by id if exists
   try{
-    const boxes=document.querySelectorAll('.online-stat-box');
-    // fallback: update by text content
-    const setBox = (idx,val)=>{ const box=document.querySelectorAll('div[style*="Total Online"]'); };
-  }catch(e){}
-  // simple update for your UI - find elements with numbers
-  const totalEls = document.querySelectorAll('div');
-  // Render list
-  if(filtered.length===0){
-    listEl.innerHTML='<div style="text-align:center;padding:40px 20px;color:#666;"><div style="font-size:48px;margin-bottom:12px;">🔍</div><div style="font-weight:700;">Tidak ada hasil</div><div style="font-size:12px;">Coba filter lain</div><div style="margin-top:12px;font-size:11px;color:#999;">Debug: '+total+' data di Firebase, lastSeen <5m<br>Jika warga sedang buka app, harusnya muncul di sini</div></div>';
-  } else {
-    let html='';
-    filtered.forEach(u=>{
-      const ago=Math.floor((now-(u.lastSeen||0))/1000);
-      const agoText=ago<60? ago+'d lalu' : Math.floor(ago/60)+'m lalu';
-      const isIdle=(now-(u.lastSeen||0))>120000;
-      html+='<div style="display:flex;align-items:center;gap:12px;padding:12px;border:1px solid #E0E0E0;border-radius:12px;margin-bottom:8px;background:'+(isIdle?'#FFF8E1':'#F1F8E9')+'">'+
-        '<div style="width:40px;height:40px;border-radius:50%;background:'+(u.avatarColor||'#6750A4')+';display:flex;align-items:center;justify-content:center;color:white;font-weight:700">'+(u.name||'W')[0]+'</div>'+
-        '<div style="flex:1"><div style="font-weight:700">'+(u.name||'Warga')+' <span style="font-size:10px;background:#E8F5E9;padding:2px 6px;border-radius:10px">'+(u.role||'Warga')+'</span></div><div style="font-size:11px;color:#666">'+(u.device||'')+' • '+agoText+' • '+(u.currentTab||'beranda')+'</div></div>'+
-        '<div style="width:10px;height:10px;border-radius:50%;background:'+(isIdle?'#FFC107':'#4CAF50')+'"></div></div>';
-    });
-    listEl.innerHTML=html;
-  }
-  // update top counters (first 4 boxes)
-  try{
-    const boxes=document.querySelectorAll('div[style*="Total Online"], div[style*="Warga"]');
-    const nums=document.querySelectorAll('.online-counter, [data-count]');
-    // direct by order
-    const topNums=document.querySelectorAll('div > div:first-child');
-    const counters = document.getElementById('online-users-list').parentElement.querySelectorAll('div > div > div:first-child');
-    // fallback brute: find the 4 colored boxes
-    const allBoxes = document.querySelectorAll('div[style*="border-radius"]');
-  }catch(e){}
-  // update the 4 stat boxes directly
-  const statBoxes = document.querySelectorAll('div[style*="Total Online"]');
-  // Better: update by IDs if you have them, else query the specific container
-  const container = listEl.parentElement;
-  const statDivs = container.querySelectorAll(':scope > div > div');
-  if(statDivs.length>=4){
-    // statDivs[0] is total, etc - try to find numbers
-    const numbers = container.querySelectorAll('div > div > div:nth-child(1)');
-    // Actually just update via text search for the 4 boxes in your HTML
-    const boxes = document.querySelectorAll('div');
-  }
-  // SIMPLE: update the 4 small boxes by their position
-  const boxContainer = document.querySelector('div[style*="display:flex"]') || listEl.previousElementSibling;
-  // Update counts in header badges
-  const els = document.querySelectorAll('div');
-  // brute force update of the 4 numbers in the green card
-  const greenCard = document.getElementById('online-users-list')?.closest('div');
-  if(greenCard){
-    const nums = greenCard.querySelectorAll('div > div > div:first-child');
-    // first 4 numbers are the stats
-    let found=[];
-    greenCard.querySelectorAll('div').forEach(d=>{
-      if(/^\d+$/.test(d.textContent.trim()) && d.parentElement && d.textContent.trim().length<3){
-        // likely stat
+    const now=Date.now();
+    const events = window._authEvents || [];
+    // build last event per username
+    const map={};
+    events.forEach(ev=>{
+      if(!ev.username) return;
+      if(!map[ev.username] || (ev.time||0) > (map[ev.username].time||0)){
+        map[ev.username]=ev;
       }
     });
-  }
-  // Direct update of stat elements if they exist with specific structure from your screenshot
-  try{
-    const parent = document.querySelector('.online-stats-container') || document.getElementById('online-users-list')?.parentElement;
-    if(parent){
-      const statNumbers = parent.querySelectorAll('div > div > div > div:first-child');
-      if(statNumbers.length>=4){
-        statNumbers[0].textContent = total;
-        statNumbers[1].textContent = wargaCount;
-        statNumbers[2].textContent = idle;
-        statNumbers[3].textContent = total;
+    let online=[];
+    Object.values(map).forEach(ev=>{
+      const age = now - (ev.time||0);
+      // online jika last event LOGIN dan umur <5 menit
+      if(ev.type==='login' && age < 300000){
+        online.push({
+          id: ev.username,
+          name: ev.username==='warga'?'Warga Kejaksan':ev.username,
+          role: ev.role||'Warga',
+          device: ev.device||'Android',
+          lastSeen: ev.time,
+          currentTab: ev.currentTab||'beranda',
+          avatarColor: ev.type==='login'?'#2E7D32':'#9E9E9E',
+          online: true
+        });
       }
+    });
+    // Also merge with presence_kejaksan if any (fallback)
+    if(window.currentPresenceList && window.currentPresenceList.length>0){
+      window.currentPresenceList.forEach(u=>{
+        if((now-(u.lastSeen||0))<300000){
+          if(!online.find(o=>o.id===u.id || o.name===u.name)){
+            online.push(u);
+          }
+        }
+      });
     }
-    // fallback: update by finding elements that contain "Total Online" etc
-    document.querySelectorAll('div').forEach(div=>{
-      if(div.textContent.trim()==='Total Online'){
-        const numDiv = div.previousElementSibling;
-        if(numDiv) numDiv.textContent = total;
+    currentPresenceList = online;
+    const total=online.length;
+    const wargaCount=online.filter(u=> (u.role||'').toLowerCase().includes('warga')).length;
+    const idle=0;
+    // update header badge
+    const badge=document.querySelector('div:has(> .online-dot) + div') || document.getElementById('adm-online-count') || document.querySelector('[id*="online-count"]');
+    const countBadge = document.getElementById('online-count-badge') || document.querySelector('.online-badge-live');
+    // Find all elements that show 0 Online in header
+    document.querySelectorAll('div').forEach(el=>{
+      if(el.textContent.trim()==='0 Online'){
+        el.innerHTML='<span style="display:inline-flex;align-items:center;gap:6px"><span style="width:10px;height:10px;background:#4CAF50;border-radius:50%;display:inline-block"></span> '+total+' Online</span>';
       }
     });
-  }catch(e){}
+    // update 4 small boxes
+    const greenCard = listEl.closest('div')?.parentElement || listEl.parentElement;
+    if(greenCard){
+      // find the 4 boxes by their labels
+      greenCard.querySelectorAll('div').forEach(div=>{
+        const txt = div.textContent.trim();
+        if(txt==='Total Online'){
+          const num = div.previousElementSibling;
+          if(num) num.textContent = total;
+        }
+        if(txt==='Warga'){
+          const num = div.previousElementSibling;
+          if(num) num.textContent = wargaCount;
+        }
+        if(txt.includes('Idle')){
+          const num = div.previousElementSibling;
+          if(num) num.textContent = idle;
+        }
+        if(txt==='Hari Ini'){
+          const num = div.previousElementSibling;
+          if(num) num.textContent = total;
+        }
+      });
+      // brute update numbers that are 0
+      const statRow = greenCard.querySelectorAll('div[style*="Total Online"]');
+    }
+    // render list
+    if(total===0){
+      listEl.innerHTML='<div style="text-align:center;padding:30px 20px;color:#666"><div style="font-size:36px">👥</div><div style="font-weight:700;margin-top:8px">Belum ada warga online</div><div style="font-size:12px;margin-top:4px">Login sebagai warga di HP lain, akan muncul di sini dalam 3 detik</div><div style="margin-top:12px;font-size:11px;background:#F3F0FF;padding:8px;border-radius:8px">Debug: '+events.length+' auth events, map: '+Object.keys(map).length+'</div></div>';
+    } else {
+      let html='';
+      online.forEach(u=>{
+        const ago=Math.floor((now-(u.lastSeen||0))/1000);
+        const agoText=ago<60? ago+'d lalu' : Math.floor(ago/60)+'m lalu';
+        html+='<div style="display:flex;align-items:center;gap:12px;padding:12px;border:1px solid #C8E6C9;border-radius:12px;margin-bottom:8px;background:#E8F5E9">'+
+          '<div style="width:40px;height:40px;border-radius:50%;background:'+(u.avatarColor||'#2E7D32')+';display:flex;align-items:center;justify-content:center;color:white;font-weight:700">'+(u.name||'W')[0]+'</div>'+
+          '<div style="flex:1"><div style="font-weight:700">'+(u.name||'Warga')+' <span style="font-size:10px;background:#E8F5E9;padding:2px 6px;border-radius:10px;border:1px solid #C8E6C9">'+(u.role||'Warga')+'</span></div><div style="font-size:11px;color:#555">'+(u.device||'Android')+' • '+agoText+' • '+(u.currentTab||'beranda')+'</div></div>'+
+          '<div style="width:10px;height:10px;border-radius:50%;background:#4CAF50;box-shadow:0 0 0 3px rgba(76,175,80,0.2)"></div></div>';
+      });
+      listEl.innerHTML=html;
+    }
+  }catch(e){ console.log('renderOnlinePresence V4 err',e); }
 };
-d' && 'serviceWorker' in navigator){
-            navigator.serviceWorker.ready.then(reg=>{
-              reg.showNotification(ev.type==='login' ? `🟢 ${ev.name} Login` : `🔴 ${ev.name} Logout`, {
-                body: `${ev.name} (${ev.device}) ${ev.type==='login'?'baru masuk':'baru keluar'} - ${new Date(ev.ts).toLocaleTimeString('id-ID')}`,
-                icon: 'https://cdn-icons-png.flaticon.com/512/1077/1077114.png',
-                badge: 'https://cdn-icons-png.flaticon.com/512/1077/1077114.png',
-                vibrate: ev.type==='login' ? [100,50,100] : [200],
+
+// Hook auth events listener to trigger renderOnlinePresence
+(function(){
+  const origInit = window.initAuthEventsListener;
+  // override to store events globally
+  window.initAuthEventsListener = function(){
+    try{
+      const dbRef = ref(db, 'auth_events_v2');
+      onValue(dbRef, (snap)=>{
+        const data=snap.val()||{};
+        const arr=Object.values(data).sort((a,b)=>(b.time||0)-(a.time||0));
+        window._authEvents = arr;
+        // also keep original rendering of activity log
+        if(typeof window.renderAuthEvents === 'function'){
+          try{ window.renderAuthEvents(arr); }catch(e){}
+        }
+        // now render online from same data
+        try{ window.renderOnlinePresence(); }catch(e){}
+      });
+    }catch(e){ console.log('initAuthEventsListener V4 err',e); }
+  };
+  // auto init after firebase ready
+  setTimeout(()=>{ try{ if(isFirebaseActive && typeof window.initAuthEventsListener==='function') window.initAuthEventsListener(); }catch(e){} }, 1200);
+})();
+           vibrate: ev.type==='login' ? [100,50,100] : [200],
                 requireInteraction: false,
                 data: ev
               });
