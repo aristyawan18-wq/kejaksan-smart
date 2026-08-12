@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#6750A4" id="theme-color-meta">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="KejaksanSmart">
+<meta name="description" content="Sistem Informasi Terpadu & Pelayanan Publik Digital Kelurahan Kejaksan - Paket 2 Firebase Auth No HP + Sync">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icons/icon-192x192.png" type="image/png">
+<link rel="apple-touch-icon" href="/icons/icon-192x192.png">
+
+<!-- External libs -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
+
+<link rel="stylesheet" href="/css/style.css">
+<style>
+/* Paket 2 Overrides - Auth Phone & Offline-First */
+:root{ --vh: 1vh; }
+#login-screen{ position:fixed; inset:0; z-index:10000; background:#FEF7FF; display:none; overflow-y:auto; }
+#login-screen.open{ display:flex; flex-direction:column; }
+.login-card{ max-width:400px; margin:auto; padding:24px; width:100%; }
+.phone-field{ display:flex; gap:8px; align-items:center; background:white; border:1px solid #CAC4D0; border-radius:12px; padding:12px; margin:12px 0; }
+.phone-field input{ flex:1; border:none; outline:none; font-size:16px; }
+#otp-section{ display:none; margin-top:16px; }
+#otp-section.show{ display:block; }
+.otp-input{ letter-spacing:8px; font-size:22px; text-align:center; }
+#recaptcha-container{ margin:12px 0; }
+.auth-status{ font-size:12px; color:#49454F; min-height:18px; margin:8px 0; }
+.btn-auth{ width:100%; background:#6750A4; color:white; border:none; padding:14px; border-radius:12px; font-weight:600; font-size:15px; }
+.btn-auth:disabled{ opacity:.5; }
+.laporan-fab{ position:fixed; bottom:88px; right:16px; z-index:60; width:56px; height:56px; border-radius:16px; background:#6750A4; color:white; border:none; box-shadow:0 4px 12px rgba(0,0,0,.3); display:grid; place-items:center; font-size:22px; }
+#offline-indicator{ position:fixed; top:0; left:0; right:0; background:#B3261E; color:white; text-align:center; padding:6px; font-size:12px; z-index:9999; display:none; }
+body.offline #offline-indicator{ display:block; }
+.lazy-map{ min-height:400px; background:#E7E0EC; display:grid; place-items:center; }
+</style>
+
+<!-- Firebase compat SDKs (tetap pakai versi lama agar cocok data existing) -->
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+</head>
+<body class="native-android">
+
+<!-- Offline banner injected by pwa.js too -->
+<div id="splash" style="position:fixed;inset:0;background:#FEF7FF;display:grid;place-items:center;z-index:10001;transition:opacity .5s">
+  <div style="text-align:center">
+    <img src="/icons/icon-192x192.png" width="96" style="border-radius:24px">
+    <h2 style="color:#6750A4;margin:12px 0 4px">Kejaksan Smart</h2>
+    <p style="opacity:.7;font-size:12px">Paket 2 • Auth No HP • Sync</p>
+    <div style="margin-top:16px"><i class="fa-solid fa-spinner fa-spin" style="color:#6750A4"></i></div>
+  </div>
+</div>
+
+<!-- LOGIN SCREEN - Paket 2 Phone Auth -->
+<div id="login-screen" class="open">
+  <div class="login-card">
+    <div style="text-align:center;margin-bottom:24px">
+      <img src="/icons/icon-192x192.png" width="72" style="border-radius:16px">
+      <h1 style="margin:12px 0 4px;font-size:24px;font-weight:700">Kejaksan Smart</h1>
+      <p style="opacity:.7;font-size:13px">Kelurahan Kejaksan • Login dengan No HP</p>
+    </div>
+
+    <div style="background:white;padding:16px;border-radius:16px;box-shadow:0 2px 8px rgba(0,0,0,.06)">
+      <label style="font-size:12px;font-weight:600;opacity:.7">NOMOR HP (WA Aktif)</label>
+      <div class="phone-field">
+        <span style="font-weight:600;color:#49454F">+62</span>
+        <input id="phone-input" type="tel" placeholder="812 3456 7890" inputmode="numeric" autocomplete="tel">
+      </div>
+      
+      <div id="recaptcha-container"></div>
+      <div id="auth-status" class="auth-status">Masukkan nomor HP yang terdaftar di Kelurahan</div>
+      
+      <button id="btn-send-otp" class="btn-auth" onclick="AuthPhone.sendOTP()">
+        <i class="fa-solid fa-paper-plane"></i> Kirim OTP via SMS
+      </button>
+
+      <div id="otp-section">
+        <div style="margin-top:16px;border-top:1px solid #E7E0EC;padding-top:16px">
+          <label style="font-size:12px;font-weight:600;opacity:.7">KODE OTP (6 Digit)</label>
+          <div class="phone-field">
+            <input id="otp-input" class="otp-input" type="text" maxlength="6" placeholder="123456" inputmode="numeric">
+          </div>
+          <button id="btn-verify-otp" class="btn-auth" style="background:#21005D" onclick="AuthPhone.verifyOTP()">
+            Verifikasi & Masuk
+          </button>
+          <button onclick="location.reload()" style="width:100%;margin-top:8px;background:none;border:none;color:#49454F;font-size:12px">Ganti Nomor HP</button>
+        </div>
+      </div>
+
+      <div style="margin-top:20px;padding:12px;background:#F3EDF7;border-radius:12px">
+        <p style="font-size:11px;margin:0;opacity:.8"><i class="fa-solid fa-shield-halved"></i> <b>Keamanan:</b> OTP hanya berlaku 60 detik. Data Anda tersinkron ke RTDB Kelurahan dan hanya LKK yang bisa ubah status laporan. Mode offline didukung - laporan akan terkirim otomatis saat online.</p>
+      </div>
+    </div>
+
+    <p style="text-align:center;font-size:10px;opacity:.5;margin-top:16px">Paket 2 • Firebase Auth Phone • Vercel HTTPS • Web2App Ready<br>v3.0.0 • Kelurahan Kejaksan Kota Cirebon</p>
+  </div>
+</div>
+
+<!-- APP SHELL -->
+<div id="app" style="display:none">
+  <!-- Top App Bar -->
+  <header style="position:sticky;top:0;z-index:50;background:#FEF7FF;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #E7E0EC">
+    <div style="display:flex;align-items:center;gap:12px">
+      <img src="/icons/icon-72x72.png" width="36" style="border-radius:10px">
+      <div>
+        <strong style="font-size:15px">Kejaksan Smart</strong>
+        <div style="font-size:11px;opacity:.7"><span id="user-phone-label">-</span> • <span id="user-role-label">Warga</span> • <span id="sync-status" style="color:#4CAF50">● Online</span></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="PWA.promptInstall()" style="width:36px;height:36px;border-radius:50%;border:none;background:#E8DEF8"><i class="fa-solid fa-download"></i></button>
+      <button onclick="AuthPhone.logout()" style="width:36px;height:36px;border-radius:50%;border:none;background:#FFD8E4"><i class="fa-solid fa-right-from-bracket"></i></button>
+    </div>
+  </header>
+
+  <!-- Panels -->
+  <main style="padding-bottom:100px">
+    <!-- BERANDA -->
+    <section class="tab-panel active" id="panel-beranda" style="padding:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div class="card" style="margin:0"><small style="opacity:.7">Cuaca Cirebon</small><div id="weather-box">Memuat...</div></div>
+        <div class="card" style="margin:0"><small style="opacity:.7">Jadwal Sholat</small><div id="prayer-box">Memuat...</div></div>
+      </div>
+      <div class="card"><h3><i class="fa-solid fa-chart-simple"></i> Statistik</h3><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;margin-top:8px">
+        <div><div style="font-size:20px;font-weight:700" id="stat-jiwa">10.196</div><small>Jiwa</small></div>
+        <div><div style="font-size:20px;font-weight:700">7</div><small>RW</small></div>
+        <div><div style="font-size:20px;font-weight:700" id="stat-laporan">-</div><small>Laporan</small></div>
+      </div></div>
+      <div class="card"><h3>Laporan Terbaru (Realtime)</h3><div id="beranda-laporan">Memuat dari Firebase...</div></div>
+      <div class="card"><h3>Aksi Cepat</h3><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px">
+        <button class="btn btn-tonal" onclick="switchTab('laporan')"><i class="fa-solid fa-triangle-exclamation"></i><br><small>Lapor</small></button>
+        <button class="btn btn-tonal" onclick="switchTab('peta')"><i class="fa-solid fa-map"></i><br><small>Peta</small></button>
+        <button class="btn btn-tonal" onclick="switchTab('e-katalog')"><i class="fa-solid fa-store"></i><br><small>UMKM</small></button>
+        <button class="btn btn-tonal" onclick="switchTab('chat')"><i class="fa-solid fa-comments"></i><br><small>Chat</small></button>
+      </div></div>
+    </section>
+
+    <!-- LAPORAN WARGA - NEW PAKET 2 -->
+    <section class="tab-panel" id="panel-laporan" style="padding:12px;display:none">
+      <h3><i class="fa-solid fa-file-circle-plus"></i> Laporan Warga (Offline-First)</h3>
+      <div class="card">
+        <form id="form-laporan" onsubmit="return false">
+          <label>Kategori</label>
+          <select id="lap-kategori" style="width:100%;padding:12px;border-radius:12px;border:1px solid #CAC4D0;margin:6px 0 12px">
+            <option value="pembangunan">Pembangunan / Jalan Rusak</option>
+            <option value="bencana">Bencana / Banjir</option>
+            <option value="kebersihan">Kebersihan / Sampah</option>
+            <option value="keamanan">Keamanan</option>
+            <option value="umkm">UMKM / Ekonomi</option>
+            <option value="lainnya">Lainnya</option>
+          </select>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div><label>RW</label><input id="lap-rw" placeholder="03" style="width:100%;padding:12px;border-radius:12px;border:1px solid #CAC4D0"></div>
+            <div><label>RT</label><input id="lap-rt" placeholder="05" style="width:100%;padding:12px;border-radius:12px;border:1px solid #CAC4D0"></div>
+          </div>
+          <label style="margin-top:12px;display:block">Deskripsi</label>
+          <textarea id="lap-deskripsi" rows="3" placeholder="Jelaskan kondisi, lokasi detail..." style="width:100%;padding:12px;border-radius:12px;border:1px solid #CAC4D0;margin:6px 0 12px"></textarea>
+          <label>Foto (Wajib, auto compress)</label>
+          <input id="lap-foto" type="file" accept="image/*" capture="environment" style="width:100%;margin:6px 0 12px">
+          <div id="lap-preview" style="display:none;margin-bottom:12px"><img id="lap-preview-img" style="width:100%;border-radius:12px"></div>
+          <label>Alamat Detail</label>
+          <input id="lap-alamat" placeholder="Jl. ... No. ..." style="width:100%;padding:12px;border-radius:12px;border:1px solid #CAC4D0;margin:6px 0 12px">
+          <div style="display:flex;gap:8px;align-items:center;margin:8px 0">
+            <button type="button" onclick="LaporanWarga.getLocation().then(l=>{document.getElementById('lap-lat').value=l.lat;document.getElementById('lap-lng').value=l.lng; showToast('Lokasi: '+l.lat.toFixed(5)+','+l.lng.toFixed(5));}).catch(e=>showToast(e,'error'))" style="padding:8px 12px;border-radius:20px;border:1px solid #6750A4;background:white;color:#6750A4"><i class="fa-solid fa-location-crosshairs"></i> Ambil GPS</button>
+            <small id="lap-gps-status" style="opacity:.7">GPS belum diambil</small>
+          </div>
+          <input type="hidden" id="lap-lat"><input type="hidden" id="lap-lng">
+          <button id="btn-submit-laporan" onclick="handleSubmitLaporan()" style="width:100%;padding:14px;background:#6750A4;color:white;border:none;border-radius:12px;font-weight:700;margin-top:8px"><i class="fa-solid fa-cloud-arrow-up"></i> Kirim Laporan (Sync Auto)</button>
+          <div id="laporan-status" style="margin-top:8px;font-size:12px;min-height:18px"></div>
+        </form>
+      </div>
+      <div class="card"><h4>Riwayat Laporan Anda</h4><div id="riwayat-laporan">Memuat...</div></div>
+    </section>
+
+    <!-- DATA LKK -->
+    <section class="tab-panel" id="panel-data-lkk" style="display:none;padding:12px">
+      <div id="lkk-tabs" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:8px">
+        <button class="chip active" data-mod="pembangunan">Pembangunan</button>
+        <button class="chip" data-mod="laporan">Laporan Masuk</button>
+        <button class="chip" data-mod="bencana">Bencana</button>
+        <button class="chip" data-mod="umkm">UMKM</button>
+      </div>
+      <div id="mod-list">Data dari Firebase RTDB akan tampil di sini (sinkron dengan data Anda yang sudah ada)</div>
+    </section>
+
+    <!-- E-KATALOG -->
+    <section class="tab-panel" id="panel-e-katalog" style="display:none;background:#0A0A0B;min-height:100vh;padding:0">
+      <div style="background:#1C1C1E;padding:16px;position:sticky;top:0;z-index:10">
+        <h1 style="margin:0;color:white">E-Katalog</h1>
+        <p style="margin:4px 0 0;color:#8E8E93;font-size:12px">UMKM Warga Kejaksan • Sinkron RTDB</p>
+      </div>
+      <div id="ek-list" style="padding:12px;color:white">Memuat UMKM dari RTDB...</div>
+    </section>
+
+    <!-- PETA -->
+    <section class="tab-panel" id="panel-peta" style="display:none;padding:0;position:relative;height:calc(100vh - 120px)">
+      <div style="position:absolute;top:8px;left:10px;right:10px;z-index:500;display:flex;gap:6px">
+        <div style="flex:1;display:flex;align-items:center;background:white;border-radius:12px;padding:0 12px;box-shadow:0 4px 12px rgba(0,0,0,.15)">
+          <i class="fa-solid fa-magnifying-glass" style="margin-right:8px;opacity:.5"></i>
+          <input id="peta-search" placeholder="Cari UMKM, RW..." style="flex:1;border:none;outline:none;padding:12px 0;font-size:13px">
+        </div>
+      </div>
+      <div id="map" class="lazy-map" style="height:100%"><i class="fa-solid fa-map-location-dot fa-2x"></i><br>Memuat peta Leaflet...</div>
+    </section>
+
+    <!-- CHAT -->
+    <section class="tab-panel" id="panel-chat" style="display:none;padding:0;display:flex;flex-direction:column;height:calc(100vh - 120px)">
+      <div style="padding:10px;border-bottom:1px solid #E7E0EC;background:white;display:flex;justify-content:space-between">
+        <strong><i class="fa-solid fa-users"></i> Chat Warga (RTDB Sync)</strong>
+        <span style="font-size:11px;color:#4CAF50">● Realtime</span>
+      </div>
+      <div id="chat-list" style="flex:1;overflow-y:auto;padding:12px">Chat akan sinkron antar warga via Firebase</div>
+      <div style="padding:8px;border-top:1px solid #E7E0EC;display:flex;gap:8px;background:white">
+        <input id="chat-input" placeholder="Ketik pesan..." style="flex:1;padding:12px;border-radius:24px;border:1px solid #CAC4D0">
+        <button onclick="sendChatSimple()" style="width:44px;height:44px;border-radius:50%;background:#6750A4;color:white;border:none"><i class="fa-solid fa-paper-plane"></i></button>
+      </div>
+    </section>
+  </main>
+
+  <!-- Bottom Nav -->
+  <nav class="bottom-nav" style="position:fixed;bottom:0;left:0;right:0;background:white;border-top:1px solid #E7E0EC;display:flex;justify-content:space-around;padding:8px 0 12px;z-index:70">
+    <button onclick="switchTab('beranda')" data-tab="beranda" class="active" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none"><span class="material-symbols-rounded">home</span><small>Beranda</small></button>
+    <button onclick="switchTab('laporan')" data-tab="laporan" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none"><span class="material-symbols-rounded">report</span><small>Lapor</small></button>
+    <button onclick="switchTab('data-lkk')" data-tab="data-lkk" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none"><span class="material-symbols-rounded">article</span><small>Data</small></button>
+    <button onclick="switchTab('peta')" data-tab="peta" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none"><span class="material-symbols-rounded">map</span><small>Peta</small></button>
+    <button onclick="switchTab('e-katalog')" data-tab="e-katalog" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none"><span class="material-symbols-rounded">storefront</span><small>UMKM</small></button>
+  </nav>
+
+  <button class="laporan-fab" onclick="switchTab('laporan')"><i class="fa-solid fa-plus"></i></button>
+</div>
+
+<!-- Scripts Paket 2 -->
+<script src="/js/app.js"></script>
+<script src="/js/firebase.js"></script>
+<script src="/js/auth-phone.js"></script>
+<script src="/js/pwa.js"></script>
+<script>
+// Paket 2 - Core UI Logic
+function switchTab(name){
+  document.querySelectorAll('.tab-panel').forEach(p=>{p.style.display='none'; p.classList.remove('active')});
+  const el = document.getElementById('panel-'+name);
+  if(el){ el.style.display = name==='peta' || name==='chat' ? 'flex' : 'block'; el.classList.add('active'); }
+  document.querySelectorAll('.bottom-nav button').forEach(b=>b.classList.remove('active'));
+  document.querySelector(`[data-tab="${name}"]`)?.classList.add('active');
+  try{ history.pushState({tab:name}, '', '?tab='+name); }catch{}
+  try{ navigator.vibrate && navigator.vibrate(10);}catch{}
+  
+  // Lazy load map
+  if(name==='peta' && !window.mapLoaded){
+    loadMap();
+  }
+}
+
+function showAppAfterLogin(){
+  document.getElementById('splash').style.opacity='0';
+  setTimeout(()=>document.getElementById('splash').style.display='none',500);
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('user-phone-label').textContent = localStorage.getItem('ks_user_phone')||'-';
+  // Listen laporan realtime
+  if(window.FirebaseSync){
+    FirebaseSync.listenLaporan(arr=>{
+      document.getElementById('stat-laporan').textContent = arr.length;
+      document.getElementById('beranda-laporan').innerHTML = arr.slice(0,5).map(l=>`<div style="padding:8px;border-bottom:1px solid #eee"><b>${l.kategori}</b> - ${l.deskripsi?.slice(0,50)} <br><small>${l.rw||''}/${l.rt||''} • ${l.status}</small></div>`).join('') || 'Belum ada laporan';
+      document.getElementById('riwayat-laporan').innerHTML = arr.filter(a=>a.uid===firebase.auth().currentUser?.uid).map(l=>`<div style="padding:8px;border:1px solid #E7E0EC;border-radius:12px;margin:6px 0"><b>${l.kategori}</b> <span style="float:right;background:${l.status==='selesai'?'#4CAF50':'#FF9800'};color:white;padding:2px 8px;border-radius:10px;font-size:10px">${l.status}</span><br><small>${l.deskripsi}</small></div>`).join('') || 'Belum ada riwayat';
+    });
+  }
+  // Sync status
+  const updateSync = ()=>{ document.getElementById('sync-status').textContent = navigator.onLine ? '● Online' : '○ Offline'; document.getElementById('sync-status').style.color = navigator.onLine ? '#4CAF50' : '#B3261E'; };
+  window.addEventListener('online', updateSync); window.addEventListener('offline', updateSync); updateSync();
+}
+
+function showLoginScreen(){
+  document.getElementById('splash').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('app').style.display='none';
+}
+
+function showToast(msg, type='info'){
+  let t = document.getElementById('toast');
+  if(!t){ t=document.createElement('div'); t.id='toast'; t.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#21005D;color:white;padding:12px 20px;border-radius:24px;font-size:13px;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.3)'; document.body.appendChild(t); }
+  t.textContent=msg; t.style.display='block';
+  t.style.background = type==='error' ? '#B3261E' : '#21005D';
+  setTimeout(()=>t.style.display='none',3000);
+}
+
+async function handleSubmitLaporan(){
+  const kategori = document.getElementById('lap-kategori').value;
+  const rw = document.getElementById('lap-rw').value;
+  const rt = document.getElementById('lap-rt').value;
+  const deskripsi = document.getElementById('lap-deskripsi').value;
+  const alamat = document.getElementById('lap-alamat').value;
+  const fileInput = document.getElementById('lap-foto');
+  if(!deskripsi || !fileInput.files[0]){ showToast('Deskripsi & foto wajib','error'); return; }
+  const btn = document.getElementById('btn-submit-laporan');
+  btn.disabled=true; btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Mengirim...';
+  try{
+    await LaporanWarga.submit({kategori, rw, rt, deskripsi, alamatDetail:alamat, fotoFile:fileInput.files[0]});
+    document.getElementById('form-laporan').reset();
+    document.getElementById('lap-preview').style.display='none';
+    showToast('Laporan berhasil dikirim!');
+  }catch(e){ showToast('Gagal: '+e.message,'error'); }
+  finally{ btn.disabled=false; btn.innerHTML='<i class="fa-solid fa-cloud-arrow-up"></i> Kirim Laporan (Sync Auto)'; }
+}
+
+// Foto preview
+document.getElementById('lap-foto')?.addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    document.getElementById('lap-preview-img').src = ev.target.result;
+    document.getElementById('lap-preview').style.display='block';
+  };
+  reader.readAsDataURL(file);
+});
+
+// Leaflet lazy
+let map, mapLoaded=false;
+function loadMap(){
+  if(mapLoaded) return;
+  const script = document.createElement('script');
+  script.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+  script.onload=()=>{
+    mapLoaded=true;
+    map = L.map('map').setView([-6.732,108.552], 14); // Kejaksan Cirebon
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    // Load laporan markers dari Firebase
+    if(window._fb){
+      _fb.db.ref('laporan').limitToLast(50).on('value', snap=>{
+        const val = snap.val()||{};
+        Object.values(val).forEach(l=>{
+          if(l.lat && l.lng){
+            L.marker([l.lat, l.lng]).addTo(map).bindPopup(`<b>${l.kategori}</b><br>${l.deskripsi?.slice(0,80)}<br><small>${l.status}</small>`);
+          }
+        });
+      });
+    }
+    showToast('Peta Kejaksan dimuat');
+  };
+  document.body.appendChild(script);
+}
+
+function sendChatSimple(){
+  const input = document.getElementById('chat-input');
+  if(!input.value.trim()) return;
+  const msg = { text: input.value, uid: firebase.auth().currentUser?.uid, phone: localStorage.getItem('ks_user_phone'), createdAt: Date.now() };
+  firebase.database().ref('chat').push(msg);
+  input.value='';
+}
+
+// Hide splash guard original
+setTimeout(()=>{
+  const s=document.getElementById('splash');
+  if(s && localStorage.getItem('isLoggedIn')==='true'){ /* keep until auth resolves */ }
+  else if(s){ s.style.opacity='0'; setTimeout(()=>s.style.display='none',500); }
+}, 4000);
+</script>
+
+<!-- README untuk Vercel Deploy -->
+<script>
+// Paket 2 info for Web2App
+console.log('Kejaksan Smart Paket 2 - Firebase Phone Auth + Offline Sync + Web2App Ready');
+console.log('Untuk APK: Hosting di Vercel HTTPS, lalu paste URL ke Web2App by Monica Gupta');
+console.log('Settings Web2App: Allow File Access=ON, Geolocation=ON, Camera=ON, JavaScript=ON, DOM Storage=ON, Keep Screen On=ON, Fullscreen=ON');
+</script>
+</body>
+</html>
